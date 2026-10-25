@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if (( $# > 1 )); then
+    echo "Usage: $0 [existing-deployment-directory]" >&2
+    exit 1
+fi
+
+for command in docker rsync realpath mktemp cp; do
+    if ! command -v "$command" >/dev/null; then
+        echo "Required command not found: $command" >&2
+        exit 1
+    fi
+done
+
+source_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+destination="$(realpath -e -- "${1:-/opt/stacks/hr/olga_from_operations}")"
+
+if [[ "$source_dir" == "$destination" ||
+      "$destination/" == "$source_dir/"* ||
+      "$source_dir/" == "$destination/"* ]]; then
+    echo "Source and deployment must be separate, non-nested directories." >&2
+    exit 1
+fi
+
+for file in compose.yaml data/olga.sqlite3; do
+    if [[ ! -f "$destination/$file" ]]; then
+        echo "Missing existing deployment file: $destination/$file; refusing deployment." >&2
+        exit 1
+    fi
+done
+
+cd -- "$destination"
+docker compose config --quiet
+echo "Stopping Olga before backing up delivery history."
+docker compose stop olga
+
+backup="$(mktemp -d "$destination/data.backup-$(date +%Y%m%d-%H%M%S)-XXXXXX")"
+cp -a -- "$destination/data/." "$backup/"
+echo "Database directory backed up to $backup"
+
+rsync -av \
+    --exclude='/data/' \
+    --exclude='/data.backup-*/' \
+    --exclude='/secrets/' \
+    --exclude='/.env' \
+    --exclude='/.venv/' \
+    --exclude='/.git/' \
+    --exclude='/.pytest_cache/' \
+    --exclude='/.ruff_cache/' \
+    --exclude='__pycache__/' \
+    "$source_dir/" "$destination/"
+
+docker compose build olga
+echo "Previewing today's message without sending to Telegram."
+docker compose run --rm --no-deps olga \
+    /app/.venv/bin/python -m olga dry-run
+
+echo "Restarting Olga; an incomplete daily run may send today's reminder."
+docker compose up -d --no-deps olga
+docker compose ps olga
+docker compose logs --tail=50 olga

@@ -1,0 +1,15 @@
+secrets/
+.env
+.env.*
+!.env.example
+*.env
+.venv/
+.git/
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+data/
+data.backup-*/
+*.sqlite3*
+tests/

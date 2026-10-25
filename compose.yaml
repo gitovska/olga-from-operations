@@ -1,0 +1,30 @@
+services:
+  olga:
+    build: .
+    image: olga:latest
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 45s
+    environment:
+      CALDAV_URL: ${CALDAV_URL:-https://cal.rhonda.diy/coworker/e0678d6a-5b54-f221-31d0-7faca3d3c5b0/}
+      TIMEZONE: ${TIMEZONE:-Europe/Berlin}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      STATE_PATH: /data/olga.sqlite3
+    secrets:
+      - telegram_bot_token
+      - caldav_username
+      - caldav_password
+    volumes:
+      - ./data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+secrets:
+  telegram_bot_token:
+    file: secrets/telegram_bot_token.txt
+  caldav_username:
+    file: secrets/caldav_username.txt
+  caldav_password:
+    file: secrets/caldav_password.txt
